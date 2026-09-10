@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Подбор ОКПД2 по ТН ВЭД</title>
+<title>ОКПД2 + маркировка</title>
 <style>
  body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:18px;background:#f6f7f9;color:#1c1e21}
  h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin-bottom:14px}
+ .tabs{display:flex;gap:6px;margin-bottom:12px}
+ .tab{background:#e7ebf2;color:#233;border:0;border-radius:8px;padding:9px 18px;font-size:14px;cursor:pointer}
+ .tab.active{background:#2f6fed;color:#fff}
  .panel{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:14px;margin-bottom:14px}
  label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
  input[type=text],input[type=file],textarea{width:100%;font-size:12px;padding:6px 8px;border:1px solid #d5d9e0;border-radius:6px;box-sizing:border-box}
@@ -22,17 +25,30 @@
  .pair:last-child{border-bottom:0}
  .tag{font-size:11px;padding:2px 6px;border-radius:6px;white-space:nowrap}
  .t-ok{background:#e3f6e8;color:#1c6b34}.t-warn{background:#fdf0d5;color:#8a6100}.t-miss{background:#fbe1e1;color:#9b2323}
- select{font-size:12px;max-width:260px}#log{font-size:13px;color:#444;margin-top:8px}
+ .s-ok{background:#e3f6e8;color:#1c6b34}.s-fut{background:#fdf0d5;color:#8a6100}
+ .s-exp{background:#e6eefc;color:#1c4a9b}.s-no{background:#fbe1e1;color:#9b2323}
+ select{font-size:12px;max-width:260px}#log,#mlog{font-size:13px;color:#444;margin-top:8px}
  .wrap{max-height:70vh;overflow:auto;border:1px solid #e3e5e8;border-radius:10px}
+ .card{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:12px;margin-bottom:10px}
+ .card .row{font-size:13px;margin-top:5px}
+ .note{font-size:12px;color:#666;margin-top:8px}
 </style>
 </head>
 <body>
-<h1>Подбор кода ОКПД2 по коду ТН ВЭД</h1>
-<div class="sub">Справочник ОКПД2 грузится из Google Таблиц — все 21 раздел (A–U).</div>
+<h1>ОКПД2 и обязательная маркировка</h1>
+<div class="sub">Автономный режим: при наличии data.js данные берутся из него — интернет не нужен.</div>
 
+<div class="tabs">
+  <button class="tab active" id="t1b">Подбор ОКПД2</button>
+  <button class="tab" id="t2b">Проверка маркировки</button>
+</div>
+
+<div id="view1">
 <div class="panel">
   <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
-    <button id="pull">Загрузить из Google Таблиц</button>
+    <button id="pull">Загрузить</button>
+    <button id="refresh" class="sec">Обновить с Google</button>
+    <button id="dl" class="sec">Скачать базу</button>
     <button id="run" class="sec">Сопоставить</button>
     <button id="exp" class="sec">Экспорт в CSV</button>
     <button id="cfgBtn" class="sec">Настройки</button>
@@ -61,24 +77,51 @@
       <input type="text" id="gidTn" value="1641584841">
     </div>
     <div>
+      <label>Перечень маркировки · ID</label>
+      <input type="text" id="idMark" value="1nILPGwa8PvpbZRWsHJ1Q4RlHbCSNEAEmdQcqUesBjBk">
+      <label style="margin-top:6px">лист (gid)</label>
+      <input type="text" id="gidMark" value="0">
+    </div>
+    <div>
       <label>Мои коды ТН ВЭД (TXT) — необязательно</label>
       <input type="file" id="fMine" accept=".txt,.csv">
       <label style="margin-top:6px">или вставьте коды вручную</label>
       <textarea id="mineBox" rows="3" placeholder="2004100000, 3004900002 ..."></textarea>
+      <label style="margin-top:6px">кэш</label>
+      <div style="display:flex;gap:6px"><button id="clrCache" class="sec" style="padding:6px 10px;font-size:12px">Очистить кэш</button><span id="cacheInfo" style="font-size:12px;color:#666;align-self:center"></span></div>
     </div>
   </div>
-  <div id="log">Нажмите «Загрузить из Google Таблиц».</div>
+  <div id="log">Загрузка…</div>
 </div>
 
 <div class="wrap"><table><thead><tr>
 <th>ТН ВЭД</th><th>Наименование ТН ВЭД</th><th>ОКПД2 по ключам</th><th>Полный код ОКПД2</th><th>Статус</th>
 </tr></thead><tbody id="tb"></tbody></table></div>
+</div>
 
+<div id="view2" style="display:none">
+<div class="panel">
+  <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+    <div><label>Код ТН ВЭД (от 4 цифр)</label><input type="text" id="mTn" placeholder="например 2404110009" style="min-width:210px"></div>
+    <div><label>Код ОКПД2</label><input type="text" id="mOkpd" placeholder="например 12.00.19.500" style="min-width:210px"></div>
+    <button id="mGo">Проверить</button>
+    <button id="mLoad" class="sec">Загрузить перечень</button>
+  </div>
+  <div id="mlog"></div>
+</div>
+<div id="mres"></div>
+<div class="note">Результат носит рекомендательный характер: решение принимается по связке ТН ВЭД + ОКПД2 + наименование товара и исключениям НПА. Для медизделий дополнительно проверяются РУ и код вида НКМИ, для БАД и детского питания — СГР. Эксперимент не создаёт обязанности маркировать товар.</div>
+</div>
+
+<script src="data.js" onerror="window.__noBase=1"></script>
 <script>
-const S={min:null,byCode:null,children:null,index:null,tnNames:new Map(),rows:[]};
+const S={min:null,byCode:null,children:null,index:null,tnNames:new Map(),rows:[],mark:[],pack:null};
 const $=id=>document.getElementById(id);
 const norm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim();
 const low=s=>String(s==null?'':s).toLowerCase().replace(/ё/g,'е');
+
+const OKPD_PATT=/^\d{2}(\.\d+)*$/, TN_PATT=/^\d{6,14}$/;
+const CACHE_OKPD='okpd2_cache_v1',CACHE_MIN='okpd2_cache_min_v1',CACHE_TN='okpd2_cache_tn_v1',CACHE_MARK='okpd2_cache_mark_v1';
 
 const STOP=new Set(['прочие','прочая','прочее','прочий','прочих','прочим','прочими','прочего',
  'включенные','включенных','включенным','включена','включено','другие','других','другой',
@@ -87,6 +130,43 @@ const STOP=new Set(['прочие','прочая','прочее','прочий',
  'расфасованных','подложке','подложки','менее','более','отнесенные','используемые',
  'предназначенные','определения','аналогичные','например','формы','упаковки','розничной','продажи']);
 
+/* ---------- упаковка ---------- */
+function packRows(rows,patt){
+ return rows.filter(r=>patt.test(norm(r[0])))
+  .map(r=>norm(r[0])+'\t'+norm(r[1]).replace(/[\t\n\r]+/g,' ')).join('\n')}
+function unpackTab(s){if(!s)return[];return s.split('\n').map(l=>l.split('\t'))}
+function packMin(map){
+ const out=[];
+ for(const[tn,m]of map)for(const[c,d]of m)out.push(tn+'\t'+c+'\t'+String(d).replace(/[\t\n\r]+/g,' '));
+ return out.join('\n')}
+function unpackMin(s){
+ if(!s)return[];
+ return s.split('\n').map(l=>{const a=l.split('\t');return[a[0]||'','',a[1]||'',a[2]||'']})}
+function packMark(recs){
+ const f=['status','section','cat','item','tn','okpd','check','expS','expE','start','npa','src'];
+ return recs.map(r=>f.map(k=>String(r[k]||'').replace(/[\t\n\r]+/g,' ')).join('\t')).join('\n')}
+function unpackMark(s){
+ if(!s)return[];
+ return s.split('\n').map(l=>{const a=l.split('\t');
+  const r={status:a[0]||'',section:a[1]||'',cat:a[2]||'',item:a[3]||'',tn:a[4]||'',okpd:a[5]||'',
+   check:a[6]||'',expS:a[7]||'',expE:a[8]||'',start:a[9]||'',npa:a[10]||'',src:a[11]||''};
+  r.tnTokens=digitsOf(r.tn);r.okpdTokens=okpdOf(r.okpd);return r})}
+
+/* ---------- кэш ---------- */
+function saveCache(key,str){
+ try{localStorage.setItem(key,JSON.stringify({ts:Date.now(),s:str}));return true}
+ catch(e){[CACHE_OKPD,CACHE_MIN,CACHE_TN,CACHE_MARK].forEach(k=>{try{localStorage.removeItem(k)}catch(e2){}});
+  try{localStorage.setItem(key,JSON.stringify({ts:Date.now(),s:str}));return true}catch(e3){return false}}}
+function readCache(key){
+ try{const raw=localStorage.getItem(key);if(!raw)return null;
+  const o=JSON.parse(raw);if(!o||typeof o.s!=='string')return null;
+  return{s:o.s,ts:o.ts,rows:unpackTab(o.s)}}catch(e){return null}}
+function cacheStamp(key){
+ try{const raw=localStorage.getItem(key);if(!raw)return'';
+  const o=JSON.parse(raw);return o.ts?new Date(o.ts).toLocaleString('ru-RU'):''}catch(e){return''}}
+function updateCacheInfo(){$('cacheInfo').textContent=cacheStamp(CACHE_OKPD)?('от '+cacheStamp(CACHE_OKPD)):'пусто'}
+
+/* ---------- gviz ---------- */
 function gviz(id,gid,cols){
  cols=cols||'A,B';
  return new Promise((res,rej)=>{
@@ -98,21 +178,21 @@ function gviz(id,gid,cols){
   window.google=window.google||{};window.google.visualization=window.google.visualization||{Query:{}};
   window.google.visualization.Query.setResponse=data=>{if(window[cb])window[cb](data)};
   s.onerror=()=>{cleanup();rej(new Error('скрипт не загрузился'))};
-  s.src='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?gid='+gid
-   +'&tq='+encodeURIComponent('select '+cols)
+  let u='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tq='+encodeURIComponent('select '+cols)
    +'&tqx=out:json;responseHandler:'+cb;
-  document.head.appendChild(s)})}
-
+  if(gid)u+='&gid='+gid;
+  s.src=u;document.head.appendChild(s)})}
 function toRows(data){
  const r=(data&&data.table&&data.table.rows)||[];
  return r.map(row=>(row.c||[]).map(c=>{
   if(!c)return '';
   return c.f!=null?String(c.f):(c.v!=null?String(c.v):'')}))}
 
+/* ---------- индексы ОКПД2 ---------- */
 function buildOkpd(rows){
  const byCode=new Map(),children=new Map(),list=[];
  for(const r of rows){const c=norm(r[0]);
-  if(!/^\d{2}(\.\d+)*$/.test(c)||byCode.has(c))continue;
+  if(!OKPD_PATT.test(c)||byCode.has(c))continue;
   byCode.set(c,norm(r[1]));list.push(c)}
  for(const c of list){const p=c.split('.').slice(0,-1).join('.');
   if(!p)continue;if(!children.has(p))children.set(p,[]);children.get(p).push(c)}
@@ -123,59 +203,130 @@ function buildOkpd(rows){
   for(const t of toks){if(STOP.has(t))continue;
    if(!index.has(t))index.set(t,[]);index.get(t).push(c)}}
  return{byCode,children,index,count:list.length}}
-
-function buildMin(rows){
- const map=new Map();let last='';
+function buildMinFromRows(rows){
+ const map=new Map();
  for(const r of rows){
-  const raw=norm(r[0]),digits=raw.replace(/\D/g,'');
-  const c=norm(r[2]),d=norm(r[3]);
-  let tn=null;
-  if(/^\d/.test(raw)&&digits.length===6)tn=digits;
-  else if(!raw&&last)tn=last;
-  else{last='';continue}
-  if(tn)last=tn;
-  if(!/^\d{2}\.\d{2}\.\d{2}$/.test(c))continue;
+  const tn=norm(r[0]).replace(/\D/g,''),c=norm(r[2]),d=norm(r[3]);
+  if(tn.length!==6||!/^\d{2}\.\d{2}\.\d{2}$/.test(c))continue;
   if(!map.has(tn))map.set(tn,new Map());
   const m=map.get(tn);if(!m.has(c))m.set(c,d)}
  return map}
-
-function buildTn(rows){
+function buildTnFromRows(rows){
  const map=new Map();
  for(const r of rows){const c=norm(r[0]).replace(/\D/g,'');
   if(c.length<6)continue;if(!map.has(c))map.set(c,norm(r[1]))}
  return map}
-
 function leaves(code){
  const out=[],st=[code];
  while(st.length){const c=st.pop(),ch=S.children.get(c);
   if(!ch||!ch.length)out.push(c);else for(const k of ch)st.push(k)}
  return out.sort()}
 
+/* ---------- маркировка ---------- */
+function digitsOf(s){
+ const out=[],m=String(s||'').match(/\d[\d\s]{2,}/g)||[];
+ for(const x of m){const d=x.replace(/\s+/g,'');if(d.length>=4)out.push(d)}
+ return[...new Set(out)]}
+function okpdOf(s){return[...new Set(String(s||'').match(/\d{2}(?:\.\d+)+/g)||[])]}
+function buildMark(rows){
+ const recs=[];
+ for(const r of rows){
+  const st=norm(r[4]);
+  if(!/ОБЯЗАТЕЛЬНАЯ|ЭКСПЕРИМЕНТ|ПИЛОТ|ПРОЕКТ/i.test(st))continue;
+  const rec={status:st,section:norm(r[1]),cat:norm(r[2]),item:norm(r[3]),
+   tn:norm(r[5]),okpd:norm(r[6]),check:norm(r[7]),expS:norm(r[8]),expE:norm(r[9]),
+   start:norm(r[10]),npa:norm(r[16]),src:norm(r[17])};
+  rec.tnTokens=digitsOf(rec.tn);rec.okpdTokens=okpdOf(rec.okpd);
+  recs.push(rec)}
+ return recs}
+function modeOf(st){
+ if(/ЭКСПЕРИМЕНТ|ПИЛОТ|ПРОЕКТ/i.test(st))return 'exp';
+ if(/ОБЯЗАТЕЛЬНАЯ/i.test(st))return /утвержд|будущ|планиру/i.test(st)?'future':'ok';
+ return 'other'}
+function matchCode(tokens,q){
+ if(!q)return false;
+ for(const t of tokens){if(t===q||t.indexOf(q)===0||q.indexOf(t)===0)return true}
+ return false}
+
 const stat={ok:['подобран','t-ok'],multi:['уточнить','t-warn'],nokey:['нет в ключах','t-miss'],noleaf:['нет в справочнике','t-miss']};
 
-async function pull(){
+/* ---------- автономная база ---------- */
+function applyBase(b){
+ const ok=buildOkpd(unpackTab(b.okpd));
+ S.byCode=ok.byCode;S.children=ok.children;S.index=ok.index;
+ S.min=buildMinFromRows(unpackMin(b.min));
+ S.tnNames=buildTnFromRows(unpackTab(b.tn));
+ S.mark=b.mark?unpackMark(b.mark):[];
+ S.pack={okpd:b.okpd,min:b.min,tn:b.tn,mark:b.mark||''};
+ return ok.count}
+function downloadBase(){
+ if(!S.pack||!S.byCode){$('log').textContent='Сначала загрузите данные, затем скачивайте базу.';return}
+ const js='window.OKPD2_BASE='+JSON.stringify({v:2,ts:Date.now(),okpd:S.pack.okpd,min:S.pack.min,tn:S.pack.tn,mark:S.pack.mark})+';';
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob([js],{type:'text/javascript;charset=utf-8'}));
+ a.download='data.js';a.click();
+ $('log').textContent='Файл data.js скачан — положите его рядом с index.html.'}
+
+/* ---------- загрузка ---------- */
+async function pull(force){
  const idOk=$('idOkpd').value.trim();
  const gids=$('gidOkpd').value.split(/[,\s]+/).filter(Boolean);
- $('log').textContent='Загружаю ключи и ТН ВЭД…';
- try{
-  const [m,t]=await Promise.all([
-   gviz($('idMin').value.trim(),$('gidMin').value.trim(),'A,B,C,D'),
-   gviz($('idTn').value.trim(),$('gidTn').value.trim(),'A,B,C')]);
-  S.min=buildMin(toRows(m));
-  S.tnNames=buildTn(toRows(t));
- }catch(e){$('log').textContent='Не загрузились ключи или ТН ВЭД: '+e.message;return}
- const rows=[];let bad=0;
- for(let i=0;i<gids.length;i++){
-  $('log').textContent='Раздел '+(i+1)+' из '+gids.length+' ('+rows.length+' строк)…';
-  try{const p=await gviz(idOk,gids[i],'A,B');for(const r of toRows(p))rows.push(r)}
-  catch(e){bad++}
-  await new Promise(r=>setTimeout(r,60));
+ let rows=[],note='';
+
+ if(!force){
+  const c=readCache(CACHE_OKPD);
+  if(c&&c.s){rows=unpackTab(c.s).map(r=>[r[0]||'',r[1]||'']);note='из кэша от '+new Date(c.ts).toLocaleString('ru-RU')}}
+ if(!rows.length){
+  $('log').textContent='Загружаю справочник ОКПД2…';
+  let bad=0;
+  for(let i=0;i<gids.length;i++){
+   $('log').textContent='Раздел '+(i+1)+' из '+gids.length+' ('+rows.length+' строк)…';
+   try{const p=await gviz(idOk,gids[i],'A,B');for(const r of toRows(p))rows.push(r)}
+   catch(e){bad++}
+   await new Promise(r=>setTimeout(r,60));
+  }
+  if(!rows.length){$('log').textContent='ОКПД2 не загрузился. Проверьте доступ к таблице или возьмите готовый data.js.';return}
+  note='с Google'+(bad?(' (не открылись разделы: '+bad+')'):'');
+  if(saveCache(CACHE_OKPD,packRows(rows,OKPD_PATT)))note+=' · в кэш';else note+=' · кэш переполнен';
+  updateCacheInfo();
  }
- if(!rows.length){$('log').textContent='ОКПД2 не загрузился. Проверьте доступ по ссылке.';return}
  const ok=buildOkpd(rows);
  S.byCode=ok.byCode;S.children=ok.children;S.index=ok.index;
- $('log').textContent='Загружено: ОКПД2 — '+ok.count+' позиций'+(bad?(' (не открылись: '+bad+')'):'')+', ключей — '+S.min.size+', ТН ВЭД — '+S.tnNames.size+'. Нажмите «Сопоставить».';
-}
+ S.pack={okpd:packRows(rows,OKPD_PATT),min:'',tn:'',mark:''};
+
+ let minStr='',tnStr='';
+ if(!force){
+  const cm=readCache(CACHE_MIN),ct=readCache(CACHE_TN);
+  if(cm&&cm.s)minStr=cm.s;
+  if(ct&&ct.s)tnStr=ct.s}
+ try{
+  if(minStr&&tnStr){
+   S.min=buildMinFromRows(unpackMin(minStr));S.tnNames=buildTnFromRows(unpackTab(tnStr));
+   S.pack.min=minStr;S.pack.tn=tnStr;}
+  else{
+   $('log').textContent='Загружаю ключи и ТН ВЭД…';
+   const [m,t]=await Promise.all([
+    gviz($('idMin').value.trim(),$('gidMin').value.trim(),'A,B,C,D'),
+    gviz($('idTn').value.trim(),$('gidTn').value.trim(),'A,B,C')]);
+   const mr=toRows(m),tr=toRows(t);
+   S.min=buildMinFromRows(mr.map(r=>[r[0],'',r[2],r[3]]));
+   S.tnNames=buildTnFromRows(tr);
+   S.pack.min=packMin(S.min);S.pack.tn=packRows(tr,TN_PATT);
+   saveCache(CACHE_MIN,S.pack.min);saveCache(CACHE_TN,S.pack.tn);}
+ }catch(e){$('log').textContent='ОКПД2 загружен ('+ok.count+' позиций), но ключи или ТН ВЭД не подтянулись: '+e.message;updateCacheInfo();return}
+
+ let markStr='';
+ if(!force){const cmk=readCache(CACHE_MARK);if(cmk&&cmk.s)markStr=cmk.s}
+ if(!markStr){
+  try{const p=await gviz($('idMark').value.trim(),$('gidMark').value.trim(),'*');
+   S.mark=buildMark(toRows(p));markStr=packMark(S.mark);saveCache(CACHE_MARK,markStr);
+  }catch(e){$('log').textContent+=' Перечень маркировки не загрузился.';}
+ }else{S.mark=unpackMark(markStr)}
+ S.pack.mark=markStr||'';
+
+ $('log').textContent='Готово: ОКПД2 — '+ok.count+' позиций ('+note+'), ключей — '+S.min.size+
+  ', ТН ВЭД — '+S.tnNames.size+', записей маркировки — '+S.mark.length+'. Нажмите «Сопоставить», для автономной версии — «Скачать базу».';
+ updateCacheInfo()}
 
 function loadLocal(){
  const f=$('fMine').files[0];if(!f){$('log').textContent='Файл не выбран.';return}
@@ -188,8 +339,9 @@ function getTargets(){
  if(arr.length)return[...new Set(arr)];
  return[...new Set(S.tnNames.keys())]}
 
+/* ---------- сопоставление ---------- */
 function run(){
- if(!S.byCode||!S.min||!S.index){$('log').textContent='Сначала загрузите таблицы.';return}
+ if(!S.byCode||!S.min||!S.index){$('log').textContent='Сначала нажмите «Загрузить» или положите data.js рядом с файлом.';return}
  const targets=getTargets();
  if(!targets.length){$('log').textContent='Нет исходных кодов: вставьте их в поле или загрузите файл.';return}
  S.rows=targets.map(code=>{
@@ -270,10 +422,97 @@ function exportCSV(){
  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
  a.download='okpd2-po-tnved.csv';a.click()}
 
-$('pull').onclick=pull;$('run').onclick=run;$('exp').onclick=exportCSV;
-$('cfgBtn').onclick=()=>{const c=$('cfg');c.style.display=c.style.display==='none'?'grid':'none'};
+/* ---------- проверка маркировки ---------- */
+const MTAG={ok:['ОБЯЗАТЕЛЬНАЯ — действует','s-ok'],future:['ОБЯЗАТЕЛЬНАЯ — будущий старт','s-fut'],
+ exp:['ЭКСПЕРИМЕНТ — добровольно','s-exp'],other:['Иной режим','s-fut']};
+
+function markSearch(){
+ const tn=$('mTn').value.trim(),ok=$('mOkpd').value.trim();
+ if(!S.mark||!S.mark.length){$('mlog').textContent='Перечень маркировки не загружен — нажмите «Загрузить перечень».';return}
+ const tnq=tn.replace(/\s+/g,''),okq=ok.replace(/\s+/g,'');
+ if(tnq.replace(/\D/g,'').length<4&&okq.replace(/\D/g,'').length<5){
+  $('mlog').textContent='Введите код ТН ВЭД (минимум 4 цифры) или код ОКПД2.';return}
+ let hits=[],mode='';
+ if(tnq&&okq){
+  hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq)&&matchCode(r.okpdTokens,okq));
+  mode='both';
+  if(!hits.length){hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq)||matchCode(r.okpdTokens,okq));mode='either'}
+ }else if(tnq){hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq));mode='tn'}
+ else{hits=S.mark.filter(r=>matchCode(r.okpdTokens,okq));mode='ok'}
+ const order={ok:0,future:1,exp:2,other:3};
+ hits.sort((a,b)=>order[modeOf(a.status)]-order[modeOf(b.status)]);
+
+ const head='<div class="panel" style="padding:10px 14px"><b>Запрос:</b> ТН ВЭД '+(tn||'—')+' · ОКПД2 '+(ok||'—');
+ if(!hits.length){
+  $('mlog').innerHTML=head+'</div>';
+  $('mres').innerHTML='<div class="card"><div><span class="tag s-no">Не найдено в перечне</span></div>'
+   +'<div class="row">Введённые коды в перечне маркируемых товаров не встречаются. Причины: товар не подлежит маркировке; код введён некорректно; '
+   +'товарная группа попадает в исключения НПА; либо сочетание ТН ВЭД и ОКПД2 не совпадает с переходными ключами — попробуйте проверить каждый код отдельно.</div></div>';
+  return}
+ let h=head+'</div>';
+ if(mode==='either')h+='<div class="note">Совпадения по обоим кодам сразу не нашлось — ниже записи, совпавшие хотя бы по одному. Проверьте второй код отдельно.</div>';
+ const seen=new Set();
+ for(const r of hits.slice(0,15)){
+  const key=r.status+r.cat+r.item;if(seen.has(key))continue;seen.add(key);
+  const md=modeOf(r.status),tg=MTAG[md];
+  h+='<div class="card"><div><span class="tag '+tg[1]+'">'+tg[0]+'</span> <b>'+r.cat+'</b>'+(r.item?' — '+r.item:'')+'</div>'
+   +'<div class="row"><b>Раздел:</b> '+r.section+'</div>'
+   +'<div class="row"><b>ТН ВЭД:</b> <span class="mono">'+(r.tn||'—')+'</span></div>'
+   +'<div class="row"><b>ОКПД2:</b> <span class="mono">'+(r.okpd||'в перечне не установлен')+'</span></div>';
+  if(r.start)h+='<div class="row"><b>Старт обязательной маркировки:</b> '+r.start+'</div>';
+  if(r.expS||r.expE)h+='<div class="row"><b>Эксперимент:</b> '+(r.expS||'—')+(r.expE?' — '+r.expE:'')+' (обязанности не создаёт)</div>';
+  if(r.check)h+='<div class="row"><b>Как проверять:</b> '+r.check+'</div>';
+  if(r.npa)h+='<div class="row"><b>НПА:</b> '+r.npa+'</div>';
+  if(r.src)h+='<div class="row"><a href="'+r.src+'" target="_blank" rel="noopener">Источник</a></div>';
+  h+='</div>'}
+ if(hits.length>15)h+='<div class="note">Показаны первые 15 записей из '+hits.length+'.</div>';
+ $('mlog').innerHTML=head+'</div>';
+ $('mres').innerHTML=h}
+
+async function loadMarkOnly(){
+ if(S.mark&&S.mark.length){$('mlog').textContent='Перечень уже загружен: записей '+S.mark.length+'.';return}
+ $('mlog').textContent='Загружаю перечень маркировки…';
+ try{
+  const p=await gviz($('idMark').value.trim(),$('gidMark').value.trim(),'*');
+  S.mark=buildMark(toRows(p));
+  const s=packMark(S.mark);saveCache(CACHE_MARK,s);if(S.pack)S.pack.mark=s;
+  $('mlog').textContent='Загружено записей: '+S.mark.length+'.';
+ }catch(e){$('mlog').textContent='Не удалось загрузить перечень: '+e.message}}
+
+/* ---------- вкладки и кнопки ---------- */
+function showTab(n){
+ $('view1').style.display=n===1?'':'none';
+ $('view2').style.display=n===2?'':'none';
+ $('t1b').className='tab'+(n===1?' active':'');
+ $('t2b').className='tab'+(n===2?' active':'')}
+$('t1b').onclick=()=>showTab(1);
+$('t2b').onclick=()=>{showTab(2);
+ if(S.mark&&S.mark.length)$('mlog').textContent='Записей в перечне: '+S.mark.length+'.'};
+
+$('pull').onclick=()=>pull(false);
+$('refresh').onclick=()=>pull(true);
+$('dl').onclick=downloadBase;
+$('run').onclick=run;$('exp').onclick=exportCSV;
+$('mGo').onclick=markSearch;$('mLoad').onclick=loadMarkOnly;
+$('mTn').addEventListener('keydown',e=>{if(e.key==='Enter')markSearch()});
+$('mOkpd').addEventListener('keydown',e=>{if(e.key==='Enter')markSearch()});
+$('cfgBtn').onclick=()=>{const c=$('cfg');const open=c.style.display==='none';c.style.display=open?'grid':'none';if(open)updateCacheInfo()};
+$('clrCache').onclick=()=>{[CACHE_OKPD,CACHE_MIN,CACHE_TN,CACHE_MARK].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});updateCacheInfo();$('log').textContent='Кэш очищен.'};
 $('fMine').onchange=loadLocal;
 $('q').oninput=render;$('flt').onchange=render;
+
+/* ---------- старт ---------- */
+if(window.OKPD2_BASE){
+ try{
+  const n=applyBase(window.OKPD2_BASE);
+  $('log').textContent='Автономная база загружена: ОКПД2 — '+n+' позиций, ключей — '+S.min.size+', ТН ВЭД — '+S.tnNames.size+
+   ', маркировка — '+S.mark.length+' записей.';
+  if(S.mark.length)$('mlog').textContent='Перечень маркировки из базы: '+S.mark.length+' записей.';
+ }catch(e){$('log').textContent='Файл data.js повреждён — нажмите «Загрузить».'}
+}else{
+ $('log').textContent='Автономная база не найдена. Нажмите «Загрузить» (нужен интернет) либо положите data.js рядом с файлом.';
+ $('mlog').textContent='Перечень маркировки не загружен — нажмите «Загрузить перечень».';
+}
 </script>
 </body>
 </html>
