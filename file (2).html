@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Подбор ОКПД2 по ТН ВЭД</title>
+<style>
+ body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:18px;background:#f6f7f9;color:#1c1e21}
+ h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin-bottom:14px}
+ .panel{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:14px;margin-bottom:14px}
+ label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+ input[type=text],input[type=file],textarea{width:100%;font-size:12px;padding:6px 8px;border:1px solid #d5d9e0;border-radius:6px;box-sizing:border-box}
+ button{background:#2f6fed;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;cursor:pointer}
+ button.sec{background:#eef1f6;color:#233}
+ .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+ table{border-collapse:collapse;width:100%;background:#fff;font-size:13px}
+ th,td{border:1px solid #e3e5e8;padding:6px 8px;text-align:left;vertical-align:top}
+ th{background:#f0f3f7;position:sticky;top:0;font-size:12px}
+ tr.warn{background:#fff8e6}tr.miss{background:#fdecec}
+ .mono{font-family:ui-monospace,Consolas,monospace;white-space:nowrap}
+ .pair{padding:3px 0;border-bottom:1px dotted #e3e5e8}
+ .pair:last-child{border-bottom:0}
+ .tag{font-size:11px;padding:2px 6px;border-radius:6px;white-space:nowrap}
+ .t-ok{background:#e3f6e8;color:#1c6b34}.t-warn{background:#fdf0d5;color:#8a6100}.t-miss{background:#fbe1e1;color:#9b2323}
+ select{font-size:12px;max-width:260px}#log{font-size:13px;color:#444;margin-top:8px}
+ .wrap{max-height:70vh;overflow:auto;border:1px solid #e3e5e8;border-radius:10px}
+</style>
+</head>
+<body>
+<h1>Подбор кода ОКПД2 по коду ТН ВЭД</h1>
+<div class="sub">Справочник ОКПД2 грузится из Google Таблиц — все 21 раздел (A–U).</div>
+
+<div class="panel">
+  <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+    <button id="pull">Загрузить из Google Таблиц</button>
+    <button id="run" class="sec">Сопоставить</button>
+    <button id="exp" class="sec">Экспорт в CSV</button>
+    <button id="cfgBtn" class="sec">Настройки</button>
+    <input id="q" placeholder="Фильтр: код или слово" style="padding:7px 10px;border:1px solid #d5d9e0;border-radius:8px;font-size:13px;min-width:200px">
+    <select id="flt" style="padding:7px 10px;border:1px solid #d5d9e0;border-radius:8px;font-size:13px">
+      <option value="all">Все строки</option><option value="warn">Только «уточнить»</option><option value="miss">Только без соответствия</option>
+    </select>
+  </div>
+  <div class="grid" id="cfg" style="display:none">
+    <div>
+      <label>Ключи ТН ВЭД → ОКПД2 · ID</label>
+      <input type="text" id="idMin" value="1Om43OwpFFcbcWypuZv1olvkUuNEKB1-a4EFdCOsmKIk">
+      <label style="margin-top:6px">лист (gid)</label>
+      <input type="text" id="gidMin" value="1010798882">
+    </div>
+    <div>
+      <label>Справочник ОКПД2 · ID</label>
+      <input type="text" id="idOkpd" value="16Qoho9HS77Sv9jRWbUh0k5vHjEgzDG7sZXPCp1EU3Hc">
+      <label style="margin-top:6px">листы (gid через запятую)</label>
+      <textarea id="gidOkpd" rows="3">1535275615,1684144448,1367143400,827747978,1687025671,1174673711,1709495416,1730045443,491156239,449494778,1805089519,1369457590,1063861950,445120221,1891349280,1236184706,1791545457,1266177668,542236303,636938368,514675070</textarea>
+    </div>
+    <div>
+      <label>Справочник ТН ВЭД · ID</label>
+      <input type="text" id="idTn" value="1cSHg14K2hcgiFFgFMK9xJcsAQvZJ97OeiUeBgcD9sec">
+      <label style="margin-top:6px">лист (gid)</label>
+      <input type="text" id="gidTn" value="1641584841">
+    </div>
+    <div>
+      <label>Мои коды ТН ВЭД (TXT) — необязательно</label>
+      <input type="file" id="fMine" accept=".txt,.csv">
+      <label style="margin-top:6px">или вставьте коды вручную</label>
+      <textarea id="mineBox" rows="3" placeholder="2004100000, 3004900002 ..."></textarea>
+    </div>
+  </div>
+  <div id="log">Нажмите «Загрузить из Google Таблиц».</div>
+</div>
+
+<div class="wrap"><table><thead><tr>
+<th>ТН ВЭД</th><th>Наименование ТН ВЭД</th><th>ОКПД2 по ключам</th><th>Полный код ОКПД2</th><th>Статус</th>
+</tr></thead><tbody id="tb"></tbody></table></div>
+
+<script>
+const S={min:null,byCode:null,children:null,index:null,tnNames:new Map(),rows:[]};
+const $=id=>document.getElementById(id);
+const norm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim();
+const low=s=>String(s==null?'':s).toLowerCase().replace(/ё/g,'е');
+
+const STOP=new Set(['прочие','прочая','прочее','прочий','прочих','прочим','прочими','прочего',
+ 'включенные','включенных','включенным','включена','включено','другие','других','другой',
+ 'группировки','группировок','кроме','также','либо','услуги','услуг','продукция','продукты',
+ 'товары','изделия','материалы','средства','основе','основа','наборы','набор','расфасованные',
+ 'расфасованных','подложке','подложки','менее','более','отнесенные','используемые',
+ 'предназначенные','определения','аналогичные','например','формы','упаковки','розничной','продажи']);
+
+function gviz(id,gid,cols){
+ cols=cols||'A,B';
+ return new Promise((res,rej)=>{
+  const cb='cb'+Math.random().toString(36).slice(2);
+  const s=document.createElement('script');
+  const t=setTimeout(()=>{cleanup();rej(new Error('таймаут'))},60000);
+  function cleanup(){clearTimeout(t);try{delete window[cb]}catch(e){window[cb]=undefined}if(s.parentNode)s.parentNode.removeChild(s)}
+  window[cb]=data=>{cleanup();res(data)};
+  window.google=window.google||{};window.google.visualization=window.google.visualization||{Query:{}};
+  window.google.visualization.Query.setResponse=data=>{if(window[cb])window[cb](data)};
+  s.onerror=()=>{cleanup();rej(new Error('скрипт не загрузился'))};
+  s.src='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?gid='+gid
+   +'&tq='+encodeURIComponent('select '+cols)
+   +'&tqx=out:json;responseHandler:'+cb;
+  document.head.appendChild(s)})}
+
+function toRows(data){
+ const r=(data&&data.table&&data.table.rows)||[];
+ return r.map(row=>(row.c||[]).map(c=>{
+  if(!c)return '';
+  return c.f!=null?String(c.f):(c.v!=null?String(c.v):'')}))}
+
+function buildOkpd(rows){
+ const byCode=new Map(),children=new Map(),list=[];
+ for(const r of rows){const c=norm(r[0]);
+  if(!/^\d{2}(\.\d+)*$/.test(c)||byCode.has(c))continue;
+  byCode.set(c,norm(r[1]));list.push(c)}
+ for(const c of list){const p=c.split('.').slice(0,-1).join('.');
+  if(!p)continue;if(!children.has(p))children.set(p,[]);children.get(p).push(c)}
+ const index=new Map();
+ for(const c of list){
+  if(c.split('.').length<3)continue;
+  const toks=new Set(low(byCode.get(c)).match(/[а-яе]{4,}/g)||[]);
+  for(const t of toks){if(STOP.has(t))continue;
+   if(!index.has(t))index.set(t,[]);index.get(t).push(c)}}
+ return{byCode,children,index,count:list.length}}
+
+function buildMin(rows){
+ const map=new Map();let last='';
+ for(const r of rows){
+  const raw=norm(r[0]),digits=raw.replace(/\D/g,'');
+  const c=norm(r[2]),d=norm(r[3]);
+  let tn=null;
+  if(/^\d/.test(raw)&&digits.length===6)tn=digits;
+  else if(!raw&&last)tn=last;
+  else{last='';continue}
+  if(tn)last=tn;
+  if(!/^\d{2}\.\d{2}\.\d{2}$/.test(c))continue;
+  if(!map.has(tn))map.set(tn,new Map());
+  const m=map.get(tn);if(!m.has(c))m.set(c,d)}
+ return map}
+
+function buildTn(rows){
+ const map=new Map();
+ for(const r of rows){const c=norm(r[0]).replace(/\D/g,'');
+  if(c.length<6)continue;if(!map.has(c))map.set(c,norm(r[1]))}
+ return map}
+
+function leaves(code){
+ const out=[],st=[code];
+ while(st.length){const c=st.pop(),ch=S.children.get(c);
+  if(!ch||!ch.length)out.push(c);else for(const k of ch)st.push(k)}
+ return out.sort()}
+
+const stat={ok:['подобран','t-ok'],multi:['уточнить','t-warn'],nokey:['нет в ключах','t-miss'],noleaf:['нет в справочнике','t-miss']};
+
+async function pull(){
+ const idOk=$('idOkpd').value.trim();
+ const gids=$('gidOkpd').value.split(/[,\s]+/).filter(Boolean);
+ $('log').textContent='Загружаю ключи и ТН ВЭД…';
+ try{
+  const [m,t]=await Promise.all([
+   gviz($('idMin').value.trim(),$('gidMin').value.trim(),'A,B,C,D'),
+   gviz($('idTn').value.trim(),$('gidTn').value.trim(),'A,B,C')]);
+  S.min=buildMin(toRows(m));
+  S.tnNames=buildTn(toRows(t));
+ }catch(e){$('log').textContent='Не загрузились ключи или ТН ВЭД: '+e.message;return}
+ const rows=[];let bad=0;
+ for(let i=0;i<gids.length;i++){
+  $('log').textContent='Раздел '+(i+1)+' из '+gids.length+' ('+rows.length+' строк)…';
+  try{const p=await gviz(idOk,gids[i],'A,B');for(const r of toRows(p))rows.push(r)}
+  catch(e){bad++}
+  await new Promise(r=>setTimeout(r,60));
+ }
+ if(!rows.length){$('log').textContent='ОКПД2 не загрузился. Проверьте доступ по ссылке.';return}
+ const ok=buildOkpd(rows);
+ S.byCode=ok.byCode;S.children=ok.children;S.index=ok.index;
+ $('log').textContent='Загружено: ОКПД2 — '+ok.count+' позиций'+(bad?(' (не открылись: '+bad+')'):'')+', ключей — '+S.min.size+', ТН ВЭД — '+S.tnNames.size+'. Нажмите «Сопоставить».';
+}
+
+function loadLocal(){
+ const f=$('fMine').files[0];if(!f){$('log').textContent='Файл не выбран.';return}
+ const r=new FileReader();
+ r.onload=()=>{$('mineBox').value=r.result;$('log').textContent='Коды из файла подставлены.'};
+ r.readAsText(f,'UTF-8')}
+
+function getTargets(){
+ const arr=($('mineBox').value||'').match(/\d{8,14}/g)||[];
+ if(arr.length)return[...new Set(arr)];
+ return[...new Set(S.tnNames.keys())]}
+
+function run(){
+ if(!S.byCode||!S.min||!S.index){$('log').textContent='Сначала загрузите таблицы.';return}
+ const targets=getTargets();
+ if(!targets.length){$('log').textContent='Нет исходных кодов: вставьте их в поле или загрузите файл.';return}
+ S.rows=targets.map(code=>{
+  const res={code,name:S.tnNames.get(code)||'',ms:[],opts:[],chosen:''};
+  const tn6=code.slice(0,6),m=S.min.get(tn6);
+  if(m){
+   const seen=new Set();
+   for(const[oc,on]of m){
+    res.ms.push({code6:oc,name6:on||S.byCode.get(oc)||''});
+    for(const lf of leaves(oc))if(!seen.has(lf)){seen.add(lf);res.opts.push({code:lf,name:S.byCode.get(lf)||''})}}
+   res.opts.sort((a,b)=>a.code.localeCompare(b.code));
+   res.status=!res.opts.length?'noleaf':(res.opts.length===1?'ok':'multi');
+   res.chosen=res.opts.length?res.opts[0].code:'';
+   return res}
+  const pref=tn6.slice(0,4),cand=new Map();
+  for(const[k,v]of S.min)if(k.slice(0,4)===pref)
+   for(const[oc,on]of v)if(!cand.has(oc))cand.set(oc,on||S.byCode.get(oc)||'');
+  const words=[...new Set((low(res.name).match(/[а-яе]{4,}/g)||[]))].filter(w=>!STOP.has(w));
+  const hits=new Map();
+  for(const w of words){
+   const arr=S.index.get(w);
+   if(!arr||arr.length>400)continue;
+   for(const oc of arr)hits.set(oc,(hits.get(oc)||0)+1)}
+  const top=[...hits].sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length).slice(0,10).map(x=>x[0]);
+  for(const[oc,on]of cand)res.ms.push({code6:oc,name6:on});
+  for(const oc of top)res.ms.push({code6:oc,name6:S.byCode.get(oc)||''});
+  const seen=new Set();
+  for(const c of [...top,...cand.keys()])
+   for(const lf of leaves(c))if(!seen.has(lf)){seen.add(lf);res.opts.push({code:lf,name:S.byCode.get(lf)||''})}
+  res.opts.sort((a,b)=>a.code.localeCompare(b.code));
+  res.chosen=res.opts.length?res.opts[0].code:'';
+  res.status='nokey';return res});
+ const c={ok:0,multi:0,nokey:0,noleaf:0};
+ for(const r of S.rows)c[r.status]++;
+ $('log').textContent='Готово. Всего: '+S.rows.length+' · подобрано однозначно: '+c.ok+' · уточнить: '+c.multi+' · нет в ключах: '+c.nokey+' · нет в справочнике: '+c.noleaf;
+ render()}
+
+const LIMIT=1500;
+function render(){
+ const q=low($('q').value).trim(),f=$('flt').value;let h='',shown=0,total=0;
+ for(let i=0;i<S.rows.length;i++){const r=S.rows[i];
+  const nm=r.chosen?(S.byCode.get(r.chosen)||''):'';
+  const hay=low(r.code+' '+r.name+' '+r.ms.map(m=>m.code6+' '+m.name6).join(' ')+' '+r.chosen+' '+nm);
+  if(q&&hay.indexOf(q)<0)continue;
+  if(f==='warn'&&r.status!=='multi')continue;
+  if(f==='miss'&&r.status!=='nokey'&&r.status!=='noleaf')continue;
+  total++;
+  if(shown>=LIMIT)continue;
+  shown++;
+  const st=stat[r.status];
+  let sel;
+  if(!r.opts.length)sel='<span class="mono">—</span>';
+  else if(r.opts.length===1)sel='<span class="mono">'+r.opts[0].code+'</span>';
+  else sel='<select data-i="'+i+'">'+r.opts.map(o=>'<option value="'+o.code+'"'+(o.code===r.chosen?' selected':'')+'>'+o.code+' — '+o.name.slice(0,60)+'</option>').join('')+'</select>';
+  const pairs=r.ms.length
+   ? r.ms.map(m=>'<div class="pair"><span class="mono">'+m.code6+'</span> '+m.name6+'</div>').join('')
+   : '<span class="mono">—</span>';
+  h+='<tr class="'+(r.status==='multi'?'warn':(r.status==='ok'?'':'miss'))+'">'
+   +'<td class="mono">'+r.code+'</td><td>'+r.name+'</td>'
+   +'<td>'+pairs+'</td>'
+   +'<td>'+sel+'<div class="pair" id="nm'+i+'">'+nm+'</div></td>'
+   +'<td><span class="tag '+st[1]+'">'+st[0]+'</span></td></tr>'}
+ if(total>LIMIT)h+='<tr><td colspan="5">Показаны первые '+LIMIT+' из '+total+' строк — сузьте фильтром. Экспорт в CSV выгружает всё.</td></tr>';
+ $('tb').innerHTML=h||'<tr><td colspan="5">Ничего не найдено</td></tr>'}
+
+$('tb').addEventListener('change',e=>{
+ const s=e.target;if(s.tagName!=='SELECT')return;
+ const i=+s.dataset.i;S.rows[i].chosen=s.value;
+ $('nm'+i).textContent=S.byCode.get(s.value)||''});
+
+function exportCSV(){
+ const head=['ТН ВЭД','Наименование ТН ВЭД','ОКПД2 (6 зн.)','Наименование ОКПД2','Полный код ОКПД2','Наименование ОКПД2 (полн.)','Статус'];
+ const lines=[head];
+ for(const r of S.rows)lines.push([r.code,r.name,r.ms.map(m=>m.code6).join(' | '),r.ms.map(m=>m.name6).join(' | '),
+  r.chosen||'',r.chosen?(S.byCode.get(r.chosen)||''):'',stat[r.status][0]]);
+ const csv='\uFEFF'+lines.map(l=>l.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ a.download='okpd2-po-tnved.csv';a.click()}
+
+$('pull').onclick=pull;$('run').onclick=run;$('exp').onclick=exportCSV;
+$('cfgBtn').onclick=()=>{const c=$('cfg');c.style.display=c.style.display==='none'?'grid':'none'};
+$('fMine').onchange=loadLocal;
+$('q').oninput=render;$('flt').onchange=render;
+</script>
+</body>
+</html>
