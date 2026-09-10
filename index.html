@@ -426,21 +426,49 @@ function exportCSV(){
 const MTAG={ok:['ОБЯЗАТЕЛЬНАЯ — действует','s-ok'],future:['ОБЯЗАТЕЛЬНАЯ — будущий старт','s-fut'],
  exp:['ЭКСПЕРИМЕНТ — добровольно','s-exp'],other:['Иной режим','s-fut']};
 
+function markCards(hits,limit){
+ const order={ok:0,future:1,exp:2,other:3},seen=new Set();let h='',n=0;
+ for(const r of hits.slice().sort((a,b)=>order[modeOf(a.status)]-order[modeOf(b.status)])){
+  const key=r.status+r.cat+r.item+r.tn;if(seen.has(key))continue;seen.add(key);
+  if(n>=limit)break;n++;
+  const tg=MTAG[modeOf(r.status)];
+  h+='<div class="card"><div><span class="tag '+tg[1]+'">'+tg[0]+'</span> <b>'+r.cat+'</b>'+(r.item?' — '+r.item:'')+'</div>'
+   +'<div class="row"><b>Раздел:</b> '+r.section+'</div>'
+   +'<div class="row"><b>ТН ВЭД:</b> <span class="mono">'+(r.tn||'—')+'</span></div>'
+   +'<div class="row"><b>ОКПД2:</b> <span class="mono">'+(r.okpd||'в перечне не установлен')+'</span></div>';
+  if(r.start)h+='<div class="row"><b>Старт обязательной маркировки:</b> '+r.start+'</div>';
+  if(r.expS||r.expE)h+='<div class="row"><b>Эксперимент:</b> '+(r.expS||'—')+(r.expE?' — '+r.expE:'')+' (обязанности не создаёт)</div>';
+  if(r.check)h+='<div class="row"><b>Как проверять:</b> '+r.check+'</div>';
+  if(r.npa)h+='<div class="row"><b>НПА:</b> '+r.npa+'</div>';
+  if(r.src)h+='<div class="row"><a href="'+r.src+'" target="_blank" rel="noopener">Источник</a></div>';
+  h+='</div>'}
+ if(hits.length>n)h+='<div class="note">Показаны первые '+n+' записей из '+hits.length+'.</div>';
+ return h}
+
 function markSearch(){
  const tn=$('mTn').value.trim(),ok=$('mOkpd').value.trim();
  if(!S.mark||!S.mark.length){$('mlog').textContent='Перечень маркировки не загружен — нажмите «Загрузить перечень».';return}
  const tnq=tn.replace(/\s+/g,''),okq=ok.replace(/\s+/g,'');
- if(tnq.replace(/\D/g,'').length<4&&okq.replace(/\D/g,'').length<5){
-  $('mlog').textContent='Введите код ТН ВЭД (минимум 4 цифры) или код ОКПД2.';return}
- let hits=[],mode='';
- if(tnq&&okq){
-  hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq)&&matchCode(r.okpdTokens,okq));
-  mode='both';
-  if(!hits.length){hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq)||matchCode(r.okpdTokens,okq));mode='either'}
- }else if(tnq){hits=S.mark.filter(r=>matchCode(r.tnTokens,tnq));mode='tn'}
- else{hits=S.mark.filter(r=>matchCode(r.okpdTokens,okq));mode='ok'}
- const order={ok:0,future:1,exp:2,other:3};
- hits.sort((a,b)=>order[modeOf(a.status)]-order[modeOf(b.status)]);
+ const tnOk=tnq.replace(/\D/g,'').length>=4, okOk=okq.replace(/\D/g,'').length>=5;
+ $('mlog').innerHTML='<div class="panel" style="padding:10px 14px"><b>Запрос:</b> ТН ВЭД '+(tn||'—')+' · ОКПД2 '+(ok||'—')+'</div>';
+ if(!tnOk||!okOk){
+  const what=(!tnOk&&!okOk)?'оба кода':(!tnOk?'код ТН ВЭД (минимум 4 цифры)':'код ОКПД2');
+  $('mres').innerHTML='<div class="card"><div><span class="tag s-no">Недостаточно данных</span></div>'
+   +'<div class="row">Введите '+what+'. Определение обязательности маркировки делается по совпадению пары кодов ТН ВЭД + ОКПД2 — по одному коду вердикт не выносится.</div></div>';
+  return}
+ const pairs=S.mark.filter(r=>matchCode(r.tnTokens,tnq)&&matchCode(r.okpdTokens,okq));
+ if(pairs.length){
+  $('mres').innerHTML='<div class="panel" style="padding:10px 14px"><span class="tag s-ok">ПАРА КОДОВ СОВПАЛА</span> '
+   +'Найдено в перечне маркируемых товаров по обоим кодам.</div>'+markCards(pairs,15);
+  return}
+ const byTn=S.mark.filter(r=>matchCode(r.tnTokens,tnq)),byOk=S.mark.filter(r=>matchCode(r.okpdTokens,okq));
+ let h='<div class="card"><div><span class="tag s-no">Совпадение пары кодов не найдено</span></div>'
+  +'<div class="row">Сочетание ТН ВЭД + ОКПД2 не совпадает с переходными ключами перечня. Вердикт по обязательности маркировки не выносится. '
+  +'Возможные причины: товар не подлежит маркировке; один из кодов введён некорректно; товарная группа попадает в исключения НПА.</div></div>';
+ if(byTn.length)h+='<div class="note"><b>Справочно, по одному коду ТН ВЭД</b> — совпадение одного кода не подтверждает обязанность маркировать:</div>'+markCards(byTn,8);
+ if(byOk.length)h+='<div class="note"><b>Справочно, по одному коду ОКПД2</b> — совпадение одного кода не подтверждает обязанность маркировать:</div>'+markCards(byOk,8);
+ if(!byTn.length&&!byOk.length)h+='<div class="row">Ни один из кодов в перечне не встречается.</div>';
+ $('mres').innerHTML=h}
 
  const head='<div class="panel" style="padding:10px 14px"><b>Запрос:</b> ТН ВЭД '+(tn||'—')+' · ОКПД2 '+(ok||'—');
  if(!hits.length){
