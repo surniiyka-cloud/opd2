@@ -184,6 +184,9 @@ function gviz(id,gid,cols){
   if(gid)u+='&gid='+gid;
   s.src=u;document.head.appendChild(s)})}
 function toRows(data){
+ function toCols(data){
+ const c=(data&&data.table&&data.table.cols)||[];
+ return c.map(x=>norm(x.label||x.id||''))}
  const r=(data&&data.table&&data.table.rows)||[];
  return r.map(row=>(row.c||[]).map(c=>{
   if(!c)return '';
@@ -229,14 +232,42 @@ function digitsOf(s){
  for(const x of m){const d=x.replace(/\s+/g,'');if(d.length>=4)out.push(d)}
  return[...new Set(out)]}
 function okpdOf(s){return[...new Set(String(s||'').match(/\d{2}(?:\.\d+)+/g)||[])]}
-function buildMark(rows){
+function findCol(cols,keys){
+ for(let i=0;i<cols.length;i++){const c=low(cols[i]);
+  for(const k of keys)if(c.indexOf(k)>=0)return i}
+ return -1}
+function buildMark(rows,cols){
+ cols=cols||[];
+ const ix={
+  status:findCol(cols,['правовой режим','режим']),
+  section:findCol(cols,['раздел']),
+  cat:findCol(cols,['категория','направление']),
+  item:findCol(cols,['подгруппа','товар']),
+  tn:findCol(cols,['тн вэд']),
+  okpd:findCol(cols,['окпд2','окпд 2']),
+  check:findCol(cols,['правило']),
+  extra:findCol(cols,['доп. критерии','доп']),
+  start:findCol(cols,['старт']),
+  npa:findCol(cols,['нормативный акт','нпа']),
+  src:findCol(cols,['источник']),
+  expS:findCol(cols,['эксперимент']),expE:-1};
+ for(let i=0;i<cols.length;i++){const c=low(cols[i]);
+  if(c.indexOf('эксперимент')>=0&&c.indexOf('конец')>=0)ix.expE=i;
+  if(c.indexOf('эксперимент')>=0&&c.indexOf('начало')>=0)ix.expS=i}
+ if(!cols.length){ix.status=6;ix.section=3;ix.cat=4;ix.item=5;ix.tn=8;ix.okpd=10;
+  ix.check=12;ix.extra=13;ix.expS=14;ix.expE=15;ix.start=16;ix.npa=-1;ix.src=-1}
+ if(ix.status<0)return[];
+ const g=i=>i>=0?norm(rows[0]&&rows[0][i]):'';
  const recs=[];
  for(const r of rows){
-  const st=norm(r[4]);
+  const v=i=>i>=0?norm(r[i]):'';
+  const st=v(ix.status);
   if(!/ОБЯЗАТЕЛЬНАЯ|ЭКСПЕРИМЕНТ|ПИЛОТ|ПРОЕКТ/i.test(st))continue;
-  const rec={status:st,section:norm(r[1]),cat:norm(r[2]),item:norm(r[3]),
-   tn:norm(r[5]),okpd:norm(r[6]),check:norm(r[7]),expS:norm(r[8]),expE:norm(r[9]),
-   start:norm(r[10]),npa:norm(r[16]),src:norm(r[17])};
+  const rec={status:st,section:v(ix.section),cat:v(ix.cat),item:v(ix.item),
+   tn:v(ix.tn),okpd:v(ix.okpd),
+   check:[v(ix.check),v(ix.extra)].filter(Boolean).join(' '),
+   expS:v(ix.expS),expE:v(ix.expE),start:v(ix.start),
+   npa:v(ix.npa),src:v(ix.src)};
   rec.tnTokens=digitsOf(rec.tn);rec.okpdTokens=okpdOf(rec.okpd);
   recs.push(rec)}
  return recs}
