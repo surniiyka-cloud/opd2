@@ -458,15 +458,25 @@ function markSearch(){
    +'<div class="row">Введите '+what+'. Маркировка определяется только по совпадению пары кодов ТН ВЭД + ОКПД2.</div></div>';
   return}
  const pairs=S.mark.filter(r=>matchCode(r.tnTokens,tnq)&&matchCode(r.okpdTokens,okq));
- if(pairs.length){
-  $('mres').innerHTML='<div class="panel" style="padding:10px 14px"><span class="tag s-ok">ПОДЛЕЖИТ МАРКИРОВКЕ</span> '
-   +'Пара кодов найдена в перечне.</div>'+markCards(pairs,15);
+ if(!pairs.length){
+  $('mres').innerHTML='<div class="card"><div><span class="tag s-no">Совпадение пары не найдено</span></div>'
+   +'<div class="row">Ни одна строка перечня не содержит одновременно этот ТН ВЭД и этот ОКПД2, поэтому обязательность не подтверждена. '
+   +'Причины: товар не подлежит маркировке; один из кодов введён некорректно; товарная группа попадает в исключения НПА; '
+   +'либо коды не образуют рекомендованную переходными ключами пару.</div></div>';
   return}
- $('mres').innerHTML='<div class="card"><div><span class="tag s-no">Совпадение пары не найдено</span></div>'
-  +'<div class="row">Ни одна строка перечня не содержит одновременно этот ТН ВЭД и этот ОКПД2, поэтому обязательность не подтверждена. '
-  +'Причины: товар не подлежит маркировке; один из кодов введён некорректно; товарная группа попадает в исключения НПА; '
-  +'либо коды не образуют рекомендованную переходными ключами пару — попробуйте проверить каждый код отдельно.</div></div>';
-}
+ const oblig=pairs.filter(r=>modeOf(r.status)!=='exp');
+ const exper=pairs.filter(r=>modeOf(r.status)==='exp');
+ let h='';
+ if(oblig.length){
+  h+='<div class="panel" style="padding:10px 14px"><span class="tag s-ok">ПОДЛЕЖИТ МАРКИРОВКЕ</span> '
+   +'Пара кодов найдена в перечне обязательной маркировки.</div>'+markCards(oblig,15);
+  if(exper.length)h+='<div class="note">Ниже — записи об эксперименте по тем же кодам. Эксперимент добровольный и '
+   +'<b>не отменяет</b> обязанность, установленную перечнем обязательной маркировки: вердикт определяется первой группой.</div>'+markCards(exper,5);
+ }else{
+  h+='<div class="card"><div><span class="tag s-exp">ЭКСПЕРИМЕНТ — обязанности не создаёт</span></div>'
+   +'<div class="row">Пара кодов найдена только в перечне эксперимента. Участие добровольное; обязательная маркировка для этой группы '
+   +'наступит после завершения соответствующего этапа — сверьтесь с НПА в карточке.</div></div>'+markCards(exper,10)}
+ $('mres').innerHTML=h}
 
 async function loadMarkOnly(){
  if(S.mark&&S.mark.length){$('mlog').textContent='Перечень уже загружен: записей '+S.mark.length+'.';return}
