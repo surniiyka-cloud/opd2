@@ -30,7 +30,8 @@
  select{font-size:12px;max-width:260px}#log,#mlog{font-size:13px;color:#444;margin-top:8px}
  .wrap{max-height:70vh;overflow:auto;border:1px solid #e3e5e8;border-radius:10px}
  .card{background:#fff;border:1px solid #e3e5e8;border-radius:10px;padding:12px;margin-bottom:10px}
- .card .row{font-size:13px;margin-top:5px}
+  .card .row{font-size:13px;margin-top:5px;overflow-wrap:anywhere;word-break:break-word}
+ .card .mono{white-space:normal;overflow-wrap:anywhere}
  .note{font-size:12px;color:#666;margin-top:8px}
 </style>
 </head>
@@ -434,7 +435,7 @@ function markCards(hits,limit){
   const tg=MTAG[modeOf(r.status)];
   h+='<div class="card"><div><span class="tag '+tg[1]+'">'+tg[0]+'</span> <b>'+r.cat+'</b>'+(r.item?' — '+r.item:'')+'</div>'
    +'<div class="row"><b>Раздел:</b> '+r.section+'</div>'
-   +'<div class="row"><b>ТН ВЭД:</b> <span class="mono">'+(r.tn||'—')+'</span></div>'
+   +'<div class="row"><b>ТН ВЭД:</b> '+r.tn.split(/;\s*/).map(x=>'<span class="mono">'+x+'</span>').join('<br>')+'</div>'
    +'<div class="row"><b>ОКПД2:</b> <span class="mono">'+(r.okpd||'в перечне не установлен')+'</span></div>';
   if(r.start)h+='<div class="row"><b>Старт обязательной маркировки:</b> '+r.start+'</div>';
   if(r.expS||r.expE)h+='<div class="row"><b>Эксперимент:</b> '+(r.expS||'—')+(r.expE?' — '+r.expE:'')+' (обязанности не создаёт)</div>';
